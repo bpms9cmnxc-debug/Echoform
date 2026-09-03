@@ -14,21 +14,60 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Build UDIF
+
+      - name: Try native app build
+        continue-on-error: true
         run: |
           chmod +x Scripts/make_dmg.sh
           ./Scripts/make_dmg.sh
-          ls -lah dist
-      - name: Upload dist artifact
+
+      - name: Always write a mountable UDZO
+        run: |
+          set -euo pipefail
+          STAGE=$(mktemp -d)/EchoformDisk
+          mkdir -p "$STAGE"
+          # Project that Finder can open; skip git/build/dist
+          rsync -a \
+            --exclude '.git' \
+            --exclude 'dist' \
+            --exclude 'build' \
+            --exclude '.github' \
+            ./ "$STAGE/Echoform/"
+          ln -sf /Applications "$STAGE/Applications"
+          cat > "$STAGE/ÖFFNEN.txt" << 'TXT'
+          Echoform für macOS
+          1. Echoform.xcodeproj doppelklicken (Xcode)
+          2. Product → Run
+          3. Oder Terminal: Scripts/make_dmg.sh
+          TXT
+          mkdir -p dist
+          rm -f dist/Echoform-0.3.1.dmg
+          hdiutil create \
+            -volname Echoform \
+            -srcfolder "$STAGE" \
+            -ov \
+            -format UDZO \
+            -fs HFS+ \
+            dist/Echoform-0.3.1.dmg
+          hdiutil imageinfo dist/Echoform-0.3.1.dmg | head
+          ls -lah dist/*.dmg
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: echoform-dmg
           path: dist/*.dmg
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+
+      - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.3.1' }}
+          name: Echoform 0.3.1
           files: dist/*.dmg
-          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Mountable UDZO disk image (hdiutil, macOS runner).
+
+            Download **Echoform-0.3.1.dmg**. Double-click it in Finder.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

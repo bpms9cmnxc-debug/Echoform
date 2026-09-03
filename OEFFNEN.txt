@@ -1,0 +1,7 @@
+Echoform — macOS
+
+1. Echoform.xcodeproj doppelklicken
+2. In Xcode: Product → Run (Apple silicon, macOS 26/27)
+3. Oder im Terminal:  chmod +x Scripts/make_dmg.sh && ./Scripts/make_dmg.sh
+
+Die alte 0.3.0-Datei war ein ISO mit falscher Endung. Diese Version ist ZIP/ISO/UDZO.

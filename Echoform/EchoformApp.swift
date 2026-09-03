@@ -7,6 +7,7 @@ struct EchoformApp: App {
             ContentView()
                 .frame(minWidth: 980, minHeight: 640)
         }
+        .windowStyle(.automatic)
         .defaultSize(width: 1180, height: 740)
     }
 }

@@ -6,10 +6,13 @@ struct ChirpSpec: Equatable {
     var stopHz: Double = 19_500
     var duration: Double = 0.008
     var amplitude: Float = 0.12
+
     var sampleCount: Int { Int((duration * sampleRate).rounded()) }
 }
 
 enum ChirpSynth {
+    static let hopGap: Double = 0.002
+
     static func samples(_ spec: ChirpSpec) -> [Float] {
         let n = max(spec.sampleCount, 16)
         let amp = min(max(spec.amplitude, 0), SafetyLimits.maxPeakAmplitude)
@@ -22,13 +25,18 @@ enum ChirpSynth {
             let t = Double(i) / spec.sampleRate
             let phase = 2 * Double.pi * (f0 * t + 0.5 * k * t * t)
             var w: Float = 1
-            if i < taper { w = Float(0.5 - 0.5 * cos(Double.pi * Double(i) / Double(taper))) }
-            else if i > n - taper { w = Float(0.5 - 0.5 * cos(Double.pi * Double(n - i) / Double(taper))) }
+            if i < taper {
+                w = Float(0.5 - 0.5 * cos(Double.pi * Double(i) / Double(taper)))
+            } else if i > n - taper {
+                w = Float(0.5 - 0.5 * cos(Double.pi * Double(n - i) / Double(taper)))
+            }
             out[i] = amp * w * Float(sin(phase))
         }
         return out
     }
 
+    /// Simultaneous orthogonal chirps (all bands at t=0). Sequential hops
+    /// shorter than max ToF leak into the next band as fake walls.
     static func hopTrain(sampleRate: Double, amplitude: Float = 0.12) -> (samples: [Float], offsets: [String: Int], chirps: [String: [Float]]) {
         var offsets: [String: Int] = [:]
         var chirps: [String: [Float]] = [:]

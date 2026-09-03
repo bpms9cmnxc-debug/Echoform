@@ -18,11 +18,16 @@ final class PoseGraph: ObservableObject {
 
     func probeUWB() {
         #if canImport(NearbyInteraction)
-        uwbAvailable = true
-        uwbNote = "NISession present. Needs a peer token from the iPhone companion."
+        if #available(iOS 16.0, macOS 13.0, *) {
+            uwbAvailable = true
+            uwbNote = "NISession symbols present. A live session still needs a peer token from the iPhone companion — Mac UWB is best-effort."
+        } else {
+            uwbAvailable = false
+            uwbNote = "This OS build has no Nearby Interaction surface."
+        }
         #else
         uwbAvailable = false
-        uwbNote = "NearbyInteraction not linked. Pose graph uses simulated baselines. GPS unused."
+        uwbNote = "NearbyInteraction.framework is not linked on this target. Pose graph uses manual / simulated baselines."
         #endif
     }
 

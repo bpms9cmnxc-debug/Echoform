@@ -1,25 +1,18 @@
 # Echoform
 
-Native macOS Swift-App. Kein Web, kein HTML.
+Native macOS Swift-App.
 
-## Datei im Repo-Root
+## Datei
 
 - [Echoform.dmg](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg)
-- [Echoform.app.zip](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.app.zip)
+- Release [v0.5.1](https://github.com/bpms9cmnxc-debug/Echoform/releases/tag/v0.5.1)
 
-Release: [v0.5.0](https://github.com/bpms9cmnxc-debug/Echoform/releases/tag/v0.5.0)
+## Start
 
-## Öffnen
+Nicht die App im DMG doppelklicken.
 
-1. DMG öffnen
-2. `ÖFFNEN.command` doppelklicken
-3. oder Echoform.app: Rechtsklick → Öffnen
+**`ÖFFNEN.command`** — kopiert nach `~/Applications` und startet.
 
-Auto-Track der Nodes aus Chirp-Laufzeit. SceneKit-3D (Orbit mit der Maus). AirPods nur als Lautsprecher.
+Oder App nach Programme ziehen, dann Rechtsklick → Öffnen.
 
-```bash
-chmod +x Scripts/make_dmg.sh
-./Scripts/make_dmg.sh
-```
-
-MIT.
+Auto-Track aus Chirp-Laufzeit. SceneKit-3D, Maus-Orbit. AirPods nur TX.

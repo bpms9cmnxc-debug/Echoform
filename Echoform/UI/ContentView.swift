@@ -28,11 +28,13 @@ struct ContentView: View {
             .padding(16)
             .frame(minWidth: 340, idealWidth: 380)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 CloudView(voxels: grid.voxels, poses: poses.list, trails: poses.trails)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .frame(minWidth: 520, minHeight: 420)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
                 FieldView(field: grid.field, width: grid.fieldWidth, height: grid.fieldHeight)
-                    .frame(height: 160)
+                    .frame(height: 140)
                     .overlay(alignment: .topLeading) {
                         Text("Interferenz  ·  konstruktiv / destruktiv")
                             .font(.caption2)

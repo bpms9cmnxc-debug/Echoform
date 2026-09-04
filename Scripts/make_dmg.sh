@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 APP_NAME="Echoform"
-VERSION="0.5.0"
+VERSION="0.5.1"
 mkdir -p "$DIST"
 
 if ! command -v xcodebuild >/dev/null 2>&1; then
@@ -46,24 +46,26 @@ ln -s /Applications "$STAGE/Applications"
 
 cat > "$STAGE/ÖFFNEN.command" << 'EOF'
 #!/bin/bash
+# Unsigned apps do not launch from a mounted DMG. Copy, strip quarantine, open.
+set -e
 cd "$(dirname "$0")"
-xattr -cr "Echoform.app" 2>/dev/null || true
-open "Echoform.app"
+DEST="$HOME/Applications"
+mkdir -p "$DEST"
+rm -rf "$DEST/Echoform.app"
+cp -R "Echoform.app" "$DEST/"
+xattr -cr "$DEST/Echoform.app" 2>/dev/null || true
+open "$DEST/Echoform.app"
 EOF
 chmod +x "$STAGE/ÖFFNEN.command"
 
 cat > "$STAGE/LIESMICH.txt" << 'TXT'
-Echoform startet nicht per Doppelklick, wenn Gatekeeper meckert.
+Echoform startet NICHT per Doppelklick auf die App im DMG.
 
 1. ÖFFNEN.command doppelklicken
-   oder
-2. Echoform.app: Rechtsklick → Öffnen → Öffnen
-   oder
-3. Terminal:
-   xattr -cr /Applications/Echoform.app
-   open /Applications/Echoform.app
+   → kopiert nach ~/Applications und startet
+2. Sonst: App nach Programme ziehen, dann Rechtsklick → Öffnen
 
-Apple silicon. Ohne Apple-Developer-ID, daher nicht notarisiert.
+Apple silicon. Nicht notarisiert.
 TXT
 
 DMG="$DIST/${APP_NAME}.dmg"

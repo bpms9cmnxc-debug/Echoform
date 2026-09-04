@@ -33,8 +33,15 @@ final class AudioHub: ObservableObject {
         refreshDevices()
     }
 
+    /// Pose-graph keys are "Mac" / "iPhone" / "AirPods". Device picker IDs are not.
+    func poseID(forDeviceID id: String?) -> String {
+        switch id {
+        case "airpods": return "AirPods"
+        default: return "Mac"
+        }
+    }
+
     func refreshDevices() {
-        // System default plus whatever Core Audio exposes through AVAudioEngine.
         var list: [AudioDeviceInfo] = [
             AudioDeviceInfo(id: "system-default", name: "System default (Mac / AirPods if selected in Settings)", hasInput: true, hasOutput: true)
         ]
@@ -65,12 +72,18 @@ final class AudioHub: ObservableObject {
 
     func arm() throws {
         if isArmed { return }
-        let sessionOK = true
-        _ = sessionOK
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
+        if engine.attachedNodes.contains(player) == false {
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: nil)
+        }
+        engine.prepare()
+        try engine.start()
+        // Format is 0 Hz until the engine is running. Installing the tap first
+        // froze a dead layout and the chirp never matched the recording.
         if !tapInstalled {
-            input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+            let input = engine.inputNode
+            let fmt = input.inputFormat(forBus: 0)
+            input.installTap(onBus: 0, bufferSize: 4096, format: fmt.sampleRate > 0 ? fmt : nil) { [weak self] buffer, _ in
                 guard let self else { return }
                 let frames = Int(buffer.frameLength)
                 guard let ch = buffer.floatChannelData?[0] else { return }
@@ -88,11 +101,6 @@ final class AudioHub: ObservableObject {
             }
             tapInstalled = true
         }
-        if engine.attachedNodes.contains(player) == false {
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: format)
-        }
-        try engine.start()
         isArmed = true
         lastError = nil
     }
@@ -107,8 +115,8 @@ final class AudioHub: ObservableObject {
         isArmed = false
     }
 
-    func ping() {
-        Task { await emitAndPick() }
+    func ping() async {
+        await emitAndPick()
     }
 
     private func emitAndPick() async {
@@ -120,15 +128,22 @@ final class AudioHub: ObservableObject {
             return
         }
         recording.removeAll(keepingCapacity: true)
-        let format = engine.mainMixerNode.outputFormat(forBus: 0)
-        let rate = format.sampleRate > 0 ? format.sampleRate : spec.sampleRate
+        let format = player.outputFormat(forBus: 0)
+        let playFormat = format.sampleRate > 0 && format.channelCount > 0
+            ? format
+            : engine.mainMixerNode.outputFormat(forBus: 0)
+        guard playFormat.sampleRate > 0, playFormat.channelCount > 0 else {
+            lastError = "Audio format not ready."
+            return
+        }
+        let rate = playFormat.sampleRate
         var specNow = spec
         specNow.sampleRate = rate
         let samples = ChirpSynth.samples(specNow)
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
+        guard let pcm = AVAudioPCMBuffer(pcmFormat: playFormat, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
         pcm.frameLength = AVAudioFrameCount(samples.count)
         if let dest = pcm.floatChannelData {
-            let chans = Int(format.channelCount)
+            let chans = Int(playFormat.channelCount)
             for c in 0..<chans {
                 for i in 0..<samples.count { dest[c][i] = samples[i] }
             }
@@ -137,14 +152,14 @@ final class AudioHub: ObservableObject {
         player.play()
         player.scheduleBuffer(pcm, completionHandler: nil)
 
-        try? await Task.sleep(nanoseconds: 180_000_000)
+        try? await Task.sleep(nanoseconds: 220_000_000)
 
         let corr = MatchedFilter.correlate(record: recording, chirp: samples)
         let peaks = MatchedFilter.pickPeaks(correlation: corr, sampleRate: rate)
+        let tx = poseID(forDeviceID: selectedOutputID)
+        let rx = poseID(forDeviceID: selectedInputID)
         lastPeaks = peaks.map {
-            EchoPeak(delaySeconds: $0.delay, snr: $0.snr, transmitterID: selectedOutputID ?? "out", receiverID: selectedInputID ?? "in")
+            EchoPeak(delaySeconds: $0.delay, snr: $0.snr, transmitterID: tx, receiverID: rx)
         }
     }
 }
-
-import Accelerate

@@ -2,21 +2,22 @@
 
 Near-ultrasonic echolocation for Mac, iPhone and AirPods.
 
-## Die DMG liegt im Repo-Root
+## Datei im Repo-Root
 
-Im **Code**-Tab, gleiche Ebene wie diese README:
+- [`Echoform.dmg`](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg) — v0.4.2, HFS+ UDZO
+- [`Echoform.app.zip`](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.app.zip)
 
-- [`Echoform.dmg`](https://github.com/bpms9cmnxc-debug/Echoform/blob/main/Echoform.dmg) — HFS+ UDZO, 125 KB, mit `Echoform.app`
-- [`Echoform.app.zip`](https://github.com/bpms9cmnxc-debug/Echoform/blob/main/Echoform.app.zip) — Fallback
+Release: [v0.4.2](https://github.com/bpms9cmnxc-debug/Echoform/releases/tag/v0.4.2)
 
-**Datei direkt laden (kein Releases-Umweg):**
-[https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg)
+## Öffnen (wichtig)
 
-Auf der GitHub-Dateiseite: **Download raw file**. Doppelklick in Finder, App nach Programme, Rechtsklick → Öffnen.
+Die App ist **nicht notarisiert**. Doppelklick allein reicht oft nicht.
 
-Auch unter [Releases v0.4.1](https://github.com/bpms9cmnxc-debug/Echoform/releases/tag/v0.4.1).
+1. DMG öffnen
+2. **`ÖFFNEN.command`** doppelklicken (nimmt die Quarantäne weg und startet)
+3. Sonst: `Echoform.app` **Rechtsklick → Öffnen → Öffnen**
 
-Apple silicon. Ad-hoc signiert, nicht notarisiert.
+Apple silicon.
 
 ## Build
 
@@ -25,4 +26,4 @@ chmod +x Scripts/make_dmg.sh
 ./Scripts/make_dmg.sh
 ```
 
-MIT. Siehe `LICENSE`.
+MIT.

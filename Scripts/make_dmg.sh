@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build Echoform.app (Release, arm64) and wrap it in a UDZO DMG.
+# Build Echoform.app and wrap it in an HFS+ UDZO DMG that Finder mounts.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 APP_NAME="Echoform"
-VERSION="0.4.0"
+VERSION="0.4.1"
 mkdir -p "$DIST"
 
 if ! command -v xcodebuild >/dev/null 2>&1; then
@@ -33,6 +33,8 @@ if [ ! -d "$APP" ]; then
   exit 1
 fi
 test -x "$APP/Contents/MacOS/${APP_NAME}"
+file "$APP/Contents/MacOS/${APP_NAME}"
+ls -lah "$APP/Contents/MacOS/${APP_NAME}"
 
 STAGE="$DIST/stage"
 rm -rf "$STAGE"
@@ -40,9 +42,29 @@ mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 
-DMG="$DIST/${APP_NAME}-${VERSION}.dmg"
-rm -f "$DMG"
-hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
-hdiutil imageinfo "$DMG" | head
+# HFS+ not APFS — DiskImageMounter is more reliable with this layout.
+DMG="$DIST/${APP_NAME}.dmg"
+rm -f "$DMG" "$DIST/${APP_NAME}-${VERSION}.dmg"
+hdiutil create \
+  -volname "$APP_NAME" \
+  -srcfolder "$STAGE" \
+  -ov \
+  -format UDZO \
+  -fs HFS+ \
+  -layout NONE \
+  "$DMG"
+
+# Must actually mount, and the volume must contain the .app
+MNT=$(mktemp -d)
+hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT"
+test -d "$MNT/${APP_NAME}.app"
+test -x "$MNT/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+ls -la "$MNT"
+hdiutil detach "$MNT" -force
+
+cp -f "$DMG" "$DIST/${APP_NAME}-${VERSION}.dmg"
+ditto -c -k --keepParent "$APP" "$DIST/${APP_NAME}.app.zip"
+
+hdiutil imageinfo "$DMG" | head -20
 echo "Wrote $DMG"
-ls -lah "$DMG"
+ls -lah "$DIST"

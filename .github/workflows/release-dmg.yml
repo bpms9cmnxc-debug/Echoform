@@ -15,35 +15,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Echoform.app and UDZO
+      - name: Build Echoform.app, HFS+ DMG, and app zip
         run: |
           chmod +x Scripts/make_dmg.sh
           ./Scripts/make_dmg.sh
-          test -f dist/Echoform-0.4.0.dmg
-          file dist/Echoform-0.4.0.dmg
-          hdiutil imageinfo dist/Echoform-0.4.0.dmg | grep -E 'Format|Class Name|checksum'
+          test -f dist/Echoform.dmg
+          test -f dist/Echoform.app.zip
+          file dist/Echoform.dmg dist/Echoform.app.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: echoform-dmg
-          path: dist/Echoform-0.4.0.dmg
+          name: echoform-macos
+          path: |
+            dist/Echoform.dmg
+            dist/Echoform-0.4.1.dmg
+            dist/Echoform.app.zip
           if-no-files-found: error
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.4.0' }}
-          name: Echoform 0.4.0
-          files: dist/Echoform-0.4.0.dmg
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.4.1' }}
+          name: Echoform 0.4.1
+          files: |
+            dist/Echoform.dmg
+            dist/Echoform-0.4.1.dmg
+            dist/Echoform.app.zip
           fail_on_unmatched_files: true
+          make_latest: true
           body: |
-            macOS installer: **Echoform-0.4.0.dmg**
+            **Echoform.dmg** — HFS+ UDZO, mounts in Finder.
 
-            1. Double-click the DMG
-            2. Drag **Echoform.app** onto Applications
-            3. Open Echoform (right-click → Open if Gatekeeper asks)
+            1. Download **Echoform.dmg**
+            2. Double-click
+            3. Drag **Echoform.app** to Applications
+            4. Right-click the app → Open (Gatekeeper)
 
-            Apple silicon. Ad-hoc signed.
+            Fallback: **Echoform.app.zip** — unzip, then right-click → Open.
+
+            Apple silicon. Ad-hoc signed. Not notarized.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

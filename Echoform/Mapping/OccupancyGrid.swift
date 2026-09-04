@@ -13,47 +13,57 @@ final class OccupancyGrid: ObservableObject {
     @Published var fieldWidth = 80
     @Published var fieldHeight = 60
 
-    var cell: Float = 0.08
-    var extent: Float = 4.0
+    var cell: Float = 0.10
+    var extent: Float = 3.2
 
     func reset() {
         voxels.removeAll()
         field = [Float](repeating: 0, count: fieldWidth * fieldHeight)
     }
 
-    /// Smear each bistatic ellipse into the grid. Cheap discrete sampling, not a PDE.
     func integrate(peaks: [EchoPeak], poses: [String: Pose], c: Double) {
         var acc: [SIMD3<Int>: Float] = [:]
         let half = Int((extent / cell).rounded())
+        let mac = poses["Mac"] ?? .macOrigin
         for peak in peaks {
             guard let tx = poses[peak.transmitterID] ?? poses.values.first,
                   let rx = poses[peak.receiverID] ?? poses.values.first else { continue }
             let path = Float(c * peak.delaySeconds)
-            if path < 0.15 || path > extent * 2.4 { continue }
-            let samples = 72
+            if path < 0.18 || path > extent * 2.2 { continue }
+            let isDirect = poses.values.contains { p in
+                p.label != tx.label && abs(simd_distance(tx.position, p.position) - path) < 0.18
+            }
+            if isDirect { continue }
+            let samples = 56
+            let d = simd_distance(tx.position, rx.position)
+            if path <= d { continue }
+            let major = path / 2
+            let minor = sqrt(max(1e-4, major * major - (d / 2) * (d / 2)))
+            let mid = (tx.position + rx.position) * 0.5
+            let dir = simd_normalize(rx.position - tx.position + SIMD3<Float>(0.001, 0, 0))
+            let up = SIMD3<Float>(0, 0, 1)
+            let side = simd_normalize(simd_cross(dir, up))
             for s in 0..<samples {
                 let a = Float(s) / Float(samples) * 2 * Float.pi
-                // sample a horizontal ellipse in z = average height
-                let f = path
-                let d = simd_distance(tx.position, rx.position)
-                if f <= d { continue }
-                let major = f / 2
-                let minor = sqrt(max(1e-4, major * major - (d / 2) * (d / 2)))
-                let mid = (tx.position + rx.position) * 0.5
-                let dir = simd_normalize(rx.position - tx.position + SIMD3<Float>(0.001, 0, 0))
-                let side = simd_normalize(simd_cross(dir, SIMD3<Float>(0, 0, 1)))
-                let p = mid + dir * (cos(a) * major) + side * (sin(a) * minor)
+                var p = mid + dir * (cos(a) * major) + side * (sin(a) * minor)
+                p.z = max(0.15, min(2.3, p.z))
                 let gi = SIMD3<Int>(
                     Int((p.x / cell).rounded()),
                     Int((p.y / cell).rounded()),
                     Int((p.z / cell).rounded())
                 )
-                if abs(gi.x) > half || abs(gi.y) > half || abs(gi.z) > half { continue }
+                if abs(gi.x) > half || abs(gi.y) > half || gi.z < 0 || gi.z > half { continue }
                 acc[gi, default: 0] += peak.snr
             }
         }
-        let fresh = acc.map { OccupancyVoxel(position: SIMD3<Float>(Float($0.key.x), Float($0.key.y), Float($0.key.z)) * cell, weight: $0.value) }
-        voxels = (voxels + fresh).suffix(4000).map { $0 }
+        _ = mac
+        let fresh = acc.map {
+            OccupancyVoxel(
+                position: SIMD3(Float($0.key.x), Float($0.key.y), Float($0.key.z)) * cell,
+                weight: $0.value
+            )
+        }
+        voxels = (voxels + fresh).suffix(1800).map { $0 }
     }
 
     func recomputeField(poses: [Pose], wavelength: Float) {

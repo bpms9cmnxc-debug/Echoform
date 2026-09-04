@@ -27,7 +27,7 @@ struct Pose: Sendable, Equatable {
     var covariance: Float
     var label: String
 
-    static let macOrigin = Pose(position: .zero, covariance: 0.02, label: "Mac")
+    static let macOrigin = Pose(position: SIMD3(0, 0, 0.92), covariance: 0.02, label: "Mac")
 }
 
 struct EchoPeak: Sendable {

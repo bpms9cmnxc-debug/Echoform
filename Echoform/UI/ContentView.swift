@@ -1,13 +1,19 @@
 import SwiftUI
 import simd
+import Combine
 
 struct ContentView: View {
     @StateObject private var audio = AudioHub()
     @StateObject private var poses = PoseGraph()
     @StateObject private var grid = OccupancyGrid()
     @State private var simulate = true
+    @State private var auto = true
     @State private var temperature = 20.0
-    @State private var status = "Idle."
+    @State private var status = "Auto-Track an."
+    @State private var hops = 0
+    @State private var last = Date()
+
+    private let tick = Timer.publish(every: 0.38, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HSplitView {
@@ -23,12 +29,12 @@ struct ContentView: View {
             .frame(minWidth: 340, idealWidth: 380)
 
             VStack(spacing: 10) {
-                CloudView(voxels: grid.voxels, poses: poses.list)
+                CloudView(voxels: grid.voxels, poses: poses.list, trails: poses.trails)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 FieldView(field: grid.field, width: grid.fieldWidth, height: grid.fieldHeight)
-                    .frame(height: 180)
+                    .frame(height: 160)
                     .overlay(alignment: .topLeading) {
-                        Text("Interference slice  ·  constructive / destructive")
+                        Text("Interferenz  ·  konstruktiv / destruktiv")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.7))
                             .padding(8)
@@ -39,7 +45,10 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             poses.probeUWB()
-            refreshField()
+            fire()
+        }
+        .onReceive(tick) { _ in
+            if auto { fire() }
         }
     }
 
@@ -47,7 +56,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("ECHOFORM")
                 .font(.system(size: 22, weight: .semibold, design: .monospaced))
-            Text("Near-ultrasonic occupancy  ·  not LiDAR")
+            Text("Native 3D  ·  Auto-Track aus Laufzeit  ·  kein HTML")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -55,7 +64,8 @@ struct ContentView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle("Simulation room (honest default)", isOn: $simulate)
+            Toggle("Simulation", isOn: $simulate)
+            Toggle("Auto-Track", isOn: $auto)
             HStack {
                 Button("Arm I/O") {
                     Task {
@@ -71,12 +81,15 @@ struct ContentView: View {
                     .keyboardShortcut(.space, modifiers: [])
                 Button("Clear") {
                     grid.reset()
-                    status = "Grid cleared."
+                    poses.reset()
+                    hops = 0
+                    status = "Grid und Tracks geleert."
+                    refreshField()
                 }
             }
             .buttonStyle(.borderedProminent)
             Slider(value: $temperature, in: 10...30, step: 0.5) {
-                Text("Air °C \(temperature, specifier: "%.1f")")
+                Text("Luft \(temperature, specifier: "%.1f") °C")
             }
             Text(status)
                 .font(.caption)
@@ -90,19 +103,25 @@ struct ContentView: View {
     private var deviceList: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Nodes").font(.headline)
-            ForEach(audio.devices) { d in
-                HStack {
-                    Circle().fill(d.hasInput && d.hasOutput ? Color.green : Color.orange).frame(width: 7, height: 7)
-                    Text(d.name).font(.caption)
+            ForEach(["Mac", "iPhone", "AirPods"], id: \.self) { id in
+                if let p = poses.poses[id] {
+                    let r = poses.range(of: id)
+                    let v = poses.speed(of: id)
+                    HStack {
+                        Circle()
+                            .fill(id == "Mac" ? Color.white : (id == "iPhone" ? Color.cyan : Color.yellow))
+                            .frame(width: 7, height: 7)
+                        Text(id).font(.caption)
+                        Spacer()
+                        Text(String(format: "%.2f %.2f %.2f  %.2fm  %.2fm/s", p.position.x, p.position.y, p.position.z, r, v))
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Text("Input level \(audio.inputLevel, specifier: "%.3f")")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            HStack {
-                Button("iPhone −") { poses.nudge("iPhone", by: SIMD3(-0.1, 0, 0)); refreshField() }
-                Button("iPhone +") { poses.nudge("iPhone", by: SIMD3(0.1, 0, 0)); refreshField() }
-            }
         }
     }
 
@@ -114,31 +133,39 @@ struct ContentView: View {
             }
             ForEach(Array(audio.lastPeaks.prefix(6).enumerated()), id: \.offset) { _, p in
                 let metres = Atmosphere.speedOfSound(celsius: temperature) * p.delaySeconds
-                Text(String(format: "τ %.3f ms   path %.2f m   snr %.2f", p.delaySeconds * 1000, metres, p.snr))
+                Text(String(format: "%@→%@  τ %.2f ms  %.2f m  snr %.2f", p.transmitterID, p.receiverID, p.delaySeconds * 1000, metres, p.snr))
                     .font(.system(.caption, design: .monospaced))
             }
         }
     }
 
     private var footer: some View {
-        Text("18–20.5 kHz chirp  ·  GPS unused  ·  UWB when the peer exists  ·  AirPods high covariance")
+        Text("\(hops) hops  ·  8.5–21 kHz  ·  AirPods nur TX  ·  GPS ungenutzt")
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func fire() {
+        let now = Date()
+        let dt = min(1, max(0.12, now.timeIntervalSince(last)))
+        last = now
         let c = Atmosphere.speedOfSound(celsius: temperature)
+        poses.stepTruth(dt: dt)
         if simulate {
-            let peaks = RoomSimulator.peaks(from: poses.list, c: c)
+            let peaks = RoomSimulator.peaks(from: poses.truthList, c: c, airpodsTX: true)
             audio.lastPeaks = peaks
+            poses.track(peaks: peaks, c: c, dt: dt)
             grid.integrate(peaks: peaks, poses: poses.poses, c: c)
-            status = "Simulated ping · \(peaks.count) bistatic arrivals."
+            hops += 1
+            status = String(format: "Auto-Track · iPhone %.2f m  AirPods %.2f m  · %d Peaks", poses.range(of: "iPhone"), poses.range(of: "AirPods"), peaks.count)
         } else {
             audio.ping()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                poses.track(peaks: audio.lastPeaks, c: c, dt: dt)
                 grid.integrate(peaks: audio.lastPeaks, poses: poses.poses, c: c)
-                status = "Live ping · \(audio.lastPeaks.count) peaks. Treat ranges as noisy."
+                hops += 1
+                status = "Live ping · \(audio.lastPeaks.count) peaks."
             }
         }
         refreshField()

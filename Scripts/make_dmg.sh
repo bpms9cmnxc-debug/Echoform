@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 APP_NAME="Echoform"
-VERSION="0.4.2"
+VERSION="0.5.0"
 mkdir -p "$DIST"
 
 if ! command -v xcodebuild >/dev/null 2>&1; then

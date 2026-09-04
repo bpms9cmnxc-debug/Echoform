@@ -1,0 +1,6 @@
+Echoform.dmg liegt im Root dieses Repositories.
+
+Pfad: /Echoform.dmg
+Raw:  https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg
+Blob: https://github.com/bpms9cmnxc-debug/Echoform/blob/main/Echoform.dmg
+Zip:  /Echoform.app.zip

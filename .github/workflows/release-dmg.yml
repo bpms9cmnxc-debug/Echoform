@@ -15,13 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Echoform.app, HFS+ DMG, and app zip
+      - name: Build, ad-hoc sign, HFS+ DMG
         run: |
           chmod +x Scripts/make_dmg.sh
           ./Scripts/make_dmg.sh
           test -f dist/Echoform.dmg
           test -f dist/Echoform.app.zip
-          file dist/Echoform.dmg dist/Echoform.app.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -29,31 +28,28 @@ jobs:
           name: echoform-macos
           path: |
             dist/Echoform.dmg
-            dist/Echoform-0.4.1.dmg
+            dist/Echoform-0.4.2.dmg
             dist/Echoform.app.zip
           if-no-files-found: error
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.4.1' }}
-          name: Echoform 0.4.1
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.4.2' }}
+          name: Echoform 0.4.2
           files: |
             dist/Echoform.dmg
-            dist/Echoform-0.4.1.dmg
+            dist/Echoform-0.4.2.dmg
             dist/Echoform.app.zip
           fail_on_unmatched_files: true
           make_latest: true
           body: |
-            **Echoform.dmg** — HFS+ UDZO, mounts in Finder.
+            Startet ohne Developer-ID.
 
-            1. Download **Echoform.dmg**
-            2. Double-click
-            3. Drag **Echoform.app** to Applications
-            4. Right-click the app → Open (Gatekeeper)
+            1. Echoform.dmg doppelklicken
+            2. **ÖFFNEN.command** doppelklicken (löscht Quarantäne)
+            3. Oder Echoform.app: Rechtsklick → Öffnen
 
-            Fallback: **Echoform.app.zip** — unzip, then right-click → Open.
-
-            Apple silicon. Ad-hoc signed. Not notarized.
+            Fallback: Echoform.app.zip, dann Rechtsklick → Öffnen.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

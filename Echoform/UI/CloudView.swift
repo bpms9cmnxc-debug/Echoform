@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import AppKit
 
 struct CloudView: NSViewRepresentable {
     var voxels: [OccupancyVoxel]

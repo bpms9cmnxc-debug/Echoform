@@ -15,59 +15,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Try native app build
-        continue-on-error: true
+      - name: Build Echoform.app and UDZO
         run: |
           chmod +x Scripts/make_dmg.sh
           ./Scripts/make_dmg.sh
-
-      - name: Always write a mountable UDZO
-        run: |
-          set -euo pipefail
-          STAGE=$(mktemp -d)/EchoformDisk
-          mkdir -p "$STAGE"
-          # Project that Finder can open; skip git/build/dist
-          rsync -a \
-            --exclude '.git' \
-            --exclude 'dist' \
-            --exclude 'build' \
-            --exclude '.github' \
-            ./ "$STAGE/Echoform/"
-          ln -sf /Applications "$STAGE/Applications"
-          cat > "$STAGE/ÖFFNEN.txt" << 'TXT'
-          Echoform für macOS
-          1. Echoform.xcodeproj doppelklicken (Xcode)
-          2. Product → Run
-          3. Oder Terminal: Scripts/make_dmg.sh
-          TXT
-          mkdir -p dist
-          rm -f dist/Echoform-0.3.1.dmg
-          hdiutil create \
-            -volname Echoform \
-            -srcfolder "$STAGE" \
-            -ov \
-            -format UDZO \
-            -fs HFS+ \
-            dist/Echoform-0.3.1.dmg
-          hdiutil imageinfo dist/Echoform-0.3.1.dmg | head
-          ls -lah dist/*.dmg
+          test -f dist/Echoform-0.4.0.dmg
+          file dist/Echoform-0.4.0.dmg
+          hdiutil imageinfo dist/Echoform-0.4.0.dmg | grep -E 'Format|Class Name|checksum'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: echoform-dmg
-          path: dist/*.dmg
+          path: dist/Echoform-0.4.0.dmg
+          if-no-files-found: error
 
-      - name: Attach to GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.3.1' }}
-          name: Echoform 0.3.1
-          files: dist/*.dmg
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.4.0' }}
+          name: Echoform 0.4.0
+          files: dist/Echoform-0.4.0.dmg
           fail_on_unmatched_files: true
           body: |
-            Mountable UDZO disk image (hdiutil, macOS runner).
+            macOS installer: **Echoform-0.4.0.dmg**
 
-            Download **Echoform-0.3.1.dmg**. Double-click it in Finder.
+            1. Double-click the DMG
+            2. Drag **Echoform.app** onto Applications
+            3. Open Echoform (right-click → Open if Gatekeeper asks)
+
+            Apple silicon. Ad-hoc signed.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

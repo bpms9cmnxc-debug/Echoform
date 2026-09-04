@@ -1,6 +1,20 @@
 import Foundation
 import simd
 
+struct Band: Equatable, Identifiable {
+    var id: String
+    var startHz: Double
+    var stopHz: Double
+    var label: String
+
+    static let all: [Band] = [
+        Band(id: "L", startHz: 8_500, stopHz: 10_500, label: "8.5–10.5 kHz"),
+        Band(id: "A", startHz: 16_500, stopHz: 18_000, label: "16.5–18 kHz"),
+        Band(id: "B", startHz: 18_000, stopHz: 19_500, label: "18–19.5 kHz"),
+        Band(id: "C", startHz: 19_500, stopHz: 21_000, label: "19.5–21 kHz"),
+    ]
+}
+
 enum Atmosphere {
     /// Speed of sound, m/s. Default 20 °C.
     static func speedOfSound(celsius: Double = 20) -> Double {

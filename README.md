@@ -2,19 +2,21 @@
 
 Near-ultrasonic echolocation for Mac, iPhone and AirPods.
 
-## Download (macOS)
+## Die DMG liegt im Repo-Root
 
-**Direct file:** [Echoform.dmg](https://github.com/bpms9cmnxc-debug/Echoform/releases/download/v0.4.1/Echoform.dmg)
+Im **Code**-Tab, gleiche Ebene wie diese README:
 
-Fallback zip: [Echoform.app.zip](https://github.com/bpms9cmnxc-debug/Echoform/releases/download/v0.4.1/Echoform.app.zip)
+- [`Echoform.dmg`](https://github.com/bpms9cmnxc-debug/Echoform/blob/main/Echoform.dmg) — HFS+ UDZO, 125 KB, mit `Echoform.app`
+- [`Echoform.app.zip`](https://github.com/bpms9cmnxc-debug/Echoform/blob/main/Echoform.app.zip) — Fallback
 
-1. Double-click the DMG
-2. Drag `Echoform.app` onto Applications
-3. Right-click Echoform → Open (unsigned / Gatekeeper)
+**Datei direkt laden (kein Releases-Umweg):**
+[https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg](https://github.com/bpms9cmnxc-debug/Echoform/raw/main/Echoform.dmg)
 
-Do not use files under older tags. v0.3.x was not a mountable app image.
+Auf der GitHub-Dateiseite: **Download raw file**. Doppelklick in Finder, App nach Programme, Rechtsklick → Öffnen.
 
-Apple silicon. Ad-hoc signed.
+Auch unter [Releases v0.4.1](https://github.com/bpms9cmnxc-debug/Echoform/releases/tag/v0.4.1).
+
+Apple silicon. Ad-hoc signiert, nicht notarisiert.
 
 ## Build
 
@@ -23,4 +25,4 @@ chmod +x Scripts/make_dmg.sh
 ./Scripts/make_dmg.sh
 ```
 
-MIT. See `LICENSE`.
+MIT. Siehe `LICENSE`.

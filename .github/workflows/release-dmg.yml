@@ -1,6 +1,53 @@
+name: Release DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build, ad-hoc sign, HFS+ DMG
+        run: |
+          chmod +x Scripts/make_dmg.sh
+          ./Scripts/make_dmg.sh
+          test -f dist/Echoform.dmg
+          test -f dist/Echoform.app.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: echoform-macos
+          path: |
+            dist/Echoform.dmg
+            dist/Echoform-0.5.1.dmg
+            dist/Echoform.app.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.5.1' }}
+          name: Echoform 0.5.1
+          files: |
+            dist/Echoform.dmg
+            dist/Echoform-0.5.1.dmg
+            dist/Echoform.app.zip
+          fail_on_unmatched_files: true
+          make_latest: true
           body: |
             Nicht die App im DMG doppelklicken — Gatekeeper blockt das.
 
             1. Echoform.dmg öffnen
             2. **ÖFFNEN.command** — kopiert nach ~/Applications und startet
             3. Oder App nach Programme ziehen, Rechtsklick → Öffnen
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

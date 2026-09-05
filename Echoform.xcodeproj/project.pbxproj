@@ -21,6 +21,7 @@
 		A10000000000000C /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000C /* Accelerate.framework */; };
 		A10000000000000D /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000D /* AVFoundation.framework */; };
 		A10000000000000E /* SceneKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000E /* SceneKit.framework */; };
+		A100000000000012 /* MacArray.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000012 /* MacArray.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +42,7 @@
 		B10000000000000F /* Echoform.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Echoform.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B100000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B100000000000011 /* Echoform.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Echoform.entitlements; sourceTree = "<group>"; };
+		B100000000000012 /* MacArray.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacArray.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000A /* PoseGraph.swift */,
+				B100000000000012 /* MacArray.swift */,
 			);
 			path = Positioning;
 			sourceTree = "<group>";
@@ -207,6 +210,7 @@
 				A100000000000009 /* Simulator.swift in Sources */,
 				A10000000000000A /* PoseGraph.swift in Sources */,
 				A10000000000000B /* Units.swift in Sources */,
+				A100000000000012 /* MacArray.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,7 +262,7 @@
 				INFOPLIST_FILE = Echoform/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.echoform.mac;
 				PRODUCT_NAME = Echoform;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -279,7 +283,7 @@
 				INFOPLIST_FILE = Echoform/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.echoform.mac;
 				PRODUCT_NAME = Echoform;
 				SWIFT_EMIT_LOC_STRINGS = YES;

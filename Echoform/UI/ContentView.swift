@@ -9,7 +9,7 @@ struct ContentView: View {
     @State private var simulate = true
     @State private var auto = true
     @State private var temperature = 20.0
-    @State private var status = "Auto-Track an."
+    @State private var status = "Mac-Array an. iPhone nicht nötig."
     @State private var hops = 0
     @State private var last = Date()
 
@@ -52,13 +52,19 @@ struct ContentView: View {
         .onReceive(tick) { _ in
             if auto { fire() }
         }
+        .onChange(of: audio.inputChannelCount) { _, n in
+            poses.setArrayChannels(input: n, output: audio.outputChannelCount)
+        }
+        .onChange(of: audio.outputChannelCount) { _, n in
+            poses.setArrayChannels(input: audio.inputChannelCount, output: n)
+        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("ECHOFORM")
                 .font(.system(size: 22, weight: .semibold, design: .monospaced))
-            Text("Native 3D  ·  Auto-Track aus Laufzeit  ·  kein HTML")
+            Text("Mac-Array 3D  ·  ohne iPhone  ·  Stereo-Chirp L/R")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -68,12 +74,17 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle("Simulation", isOn: $simulate)
             Toggle("Auto-Track", isOn: $auto)
+            Toggle("iPhone & AirPods", isOn: Binding(
+                get: { poses.useCompanions },
+                set: { poses.setUseCompanions($0); fire() }
+            ))
             HStack {
                 Button("Arm I/O") {
                     Task {
                         do {
                             try audio.arm()
-                            status = "Engine running."
+                            poses.setArrayChannels(input: audio.inputChannelCount, output: audio.outputChannelCount)
+                            status = "Engine running · \(audio.outputChannelCount) out · \(audio.inputChannelCount) in."
                         } catch {
                             status = error.localizedDescription
                         }
@@ -105,13 +116,13 @@ struct ContentView: View {
     private var deviceList: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Nodes").font(.headline)
-            ForEach(["Mac", "iPhone", "AirPods"], id: \.self) { id in
+            ForEach(nodeIDs, id: \.self) { id in
                 if let p = poses.poses[id] {
                     let r = poses.range(of: id)
                     let v = poses.speed(of: id)
                     HStack {
                         Circle()
-                            .fill(id == "Mac" ? Color.white : (id == "iPhone" ? Color.cyan : Color.yellow))
+                            .fill(nodeColor(id))
                             .frame(width: 7, height: 7)
                         Text(id).font(.caption)
                         Spacer()
@@ -121,10 +132,26 @@ struct ContentView: View {
                     }
                 }
             }
-            Text("Input level \(audio.inputLevel, specifier: "%.3f")")
+            Text("Input \(audio.inputChannelCount) ch  ·  Output \(audio.outputChannelCount) ch  ·  level \(audio.inputLevel, specifier: "%.3f")")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var nodeIDs: [String] {
+        var ids = ["Mac", "Mac-L", "Mac-R", "Mac-MicL", "Mac-MicC", "Mac-MicR"]
+        if poses.useCompanions {
+            ids.append(contentsOf: ["iPhone", "AirPods"])
+        }
+        return ids
+    }
+
+    private func nodeColor(_ id: String) -> Color {
+        if id.hasPrefix("Mac-Mic") { return Color.green }
+        if id == "Mac-L" || id == "Mac-R" { return Color.orange }
+        if id == "Mac" { return Color.white }
+        if id == "iPhone" { return Color.cyan }
+        return Color.yellow
     }
 
     private var peaks: some View {
@@ -133,7 +160,7 @@ struct ContentView: View {
             if audio.lastPeaks.isEmpty && !simulate {
                 Text("No matched-filter peaks yet.").font(.caption).foregroundStyle(.secondary)
             }
-            ForEach(Array(audio.lastPeaks.prefix(6).enumerated()), id: \.offset) { _, p in
+            ForEach(Array(audio.lastPeaks.prefix(8).enumerated()), id: \.offset) { _, p in
                 let metres = Atmosphere.speedOfSound(celsius: temperature) * p.delaySeconds
                 Text(String(format: "%@→%@  τ %.2f ms  %.2f m  snr %.2f", p.transmitterID, p.receiverID, p.delaySeconds * 1000, metres, p.snr))
                     .font(.system(.caption, design: .monospaced))
@@ -142,7 +169,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("\(hops) hops  ·  8.5–21 kHz  ·  AirPods nur TX  ·  GPS ungenutzt")
+        Text("\(hops) hops  ·  \(poses.arraySummary)  ·  18–21 kHz orthogonal  ·  GPS ungenutzt")
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
@@ -160,19 +187,28 @@ struct ContentView: View {
             poses.track(peaks: peaks, c: c, dt: dt)
             grid.integrate(peaks: peaks, poses: poses.poses, c: c)
             hops += 1
-            status = String(format: "Auto-Track · iPhone %.2f m  AirPods %.2f m  · %d Peaks", poses.range(of: "iPhone"), poses.range(of: "AirPods"), peaks.count)
+            if poses.useCompanions {
+                status = String(format: "Auto-Track · iPhone %.2f m  AirPods %.2f m  · %d Peaks", poses.range(of: "iPhone"), poses.range(of: "AirPods"), peaks.count)
+            } else {
+                status = String(format: "Mac-Array · %d TX/RX-Paare  ·  %d Peaks  ·  kein iPhone", pairCount(peaks), peaks.count)
+            }
             refreshField()
         } else {
             status = "Live ping…"
             Task {
                 await audio.ping()
+                poses.setArrayChannels(input: audio.inputChannelCount, output: audio.outputChannelCount)
                 poses.track(peaks: audio.lastPeaks, c: c, dt: dt)
                 grid.integrate(peaks: audio.lastPeaks, poses: poses.poses, c: c)
                 hops += 1
-                status = "Live ping · \(audio.lastPeaks.count) peaks."
+                status = "Live ping · \(audio.lastPeaks.count) peaks · \(audio.outputChannelCount) out / \(audio.inputChannelCount) in."
                 refreshField()
             }
         }
+    }
+
+    private func pairCount(_ peaks: [EchoPeak]) -> Int {
+        Set(peaks.map { $0.transmitterID + "→" + $0.receiverID }).count
     }
 
     private func refreshField() {

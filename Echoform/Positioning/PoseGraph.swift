@@ -5,48 +5,76 @@ import Combine
 @MainActor
 final class PoseGraph: ObservableObject {
     /// Ground-truth for the acoustic simulator only.
-    var truth: [String: Pose] = [
-        "Mac": .macOrigin,
-        "iPhone": Pose(position: SIMD3(1.15, 0.35, 1.08), covariance: 0.08, label: "iPhone"),
-        "AirPods": Pose(position: SIMD3(0.22, 0.12, 1.58), covariance: 0.22, label: "AirPods"),
-    ]
+    var truth: [String: Pose] = MacArray.simulationPoses
     /// ToF-filtered estimates shown in the 3D view.
-    @Published var poses: [String: Pose] = [
-        "Mac": .macOrigin,
-        "iPhone": Pose(position: SIMD3(1.15, 0.35, 1.08), covariance: 0.08, label: "iPhone"),
-        "AirPods": Pose(position: SIMD3(0.22, 0.12, 1.58), covariance: 0.22, label: "AirPods"),
-    ]
-    @Published var trails: [String: [SIMD3<Float>]] = [
-        "iPhone": [],
-        "AirPods": [],
-    ]
+    @Published var poses: [String: Pose] = MacArray.simulationPoses
+    @Published var trails: [String: [SIMD3<Float>]] = [:]
     @Published var uwbAvailable = false
-    @Published var uwbNote = "Auto-Track aus Chirp-Laufzeit. UWB ohne Developer-ID aus."
+    @Published var uwbNote = "Mac-Array: Stereo-Lautsprecher + alle Mikrofone. iPhone optional."
+    /// When false the 3D image is produced from the MacBook’s own speakers and mics.
+    @Published var useCompanions = false
 
     private var t: Double = 0
     private var velocity: [String: SIMD3<Float>] = [:]
+    private var lastInputChannels = 3
+    private var lastOutputChannels = 2
 
     var list: [Pose] { Array(poses.values) }
     var truthList: [Pose] { Array(truth.values) }
 
     func probeUWB() {
         uwbAvailable = false
-        uwbNote = "UWB aus. Positionen kommen aus ToF-Auto-Track."
+        uwbNote = useCompanions
+            ? "UWB aus. Positionen kommen aus ToF-Auto-Track."
+            : "Nur Mac. L/R-Chirps und alle Mic-Kanäle bauen die 3D-Wolke."
+    }
+
+    func setArrayChannels(input: Int, output: Int) {
+        lastInputChannels = max(1, input)
+        lastOutputChannels = max(1, output)
+        rebuildArray()
+    }
+
+    func setUseCompanions(_ on: Bool) {
+        useCompanions = on
+        rebuildArray()
+        probeUWB()
+    }
+
+    private func rebuildArray() {
+        let origin = Pose.macOrigin
+        var next = MacArray.poses(origin: origin, inputChannels: lastInputChannels, outputChannels: lastOutputChannels)
+        var nextTruth = MacArray.poses(origin: origin, inputChannels: max(lastInputChannels, 3), outputChannels: max(lastOutputChannels, 2))
+        if useCompanions {
+            let phone = Pose(position: SIMD3(1.15, 0.35, 1.08), covariance: 0.08, label: "iPhone")
+            let buds = Pose(position: SIMD3(0.22, 0.12, 1.58), covariance: 0.22, label: "AirPods")
+            next["iPhone"] = poses["iPhone"] ?? phone
+            next["AirPods"] = poses["AirPods"] ?? buds
+            nextTruth["iPhone"] = truth["iPhone"] ?? phone
+            nextTruth["AirPods"] = truth["AirPods"] ?? buds
+            if trails["iPhone"] == nil { trails["iPhone"] = [] }
+            if trails["AirPods"] == nil { trails["AirPods"] = [] }
+        } else {
+            next.removeValue(forKey: "iPhone")
+            next.removeValue(forKey: "AirPods")
+            nextTruth.removeValue(forKey: "iPhone")
+            nextTruth.removeValue(forKey: "AirPods")
+            trails["iPhone"] = nil
+            trails["AirPods"] = nil
+        }
+        poses = next
+        truth = nextTruth
     }
 
     func reset() {
         t = 0
-        truth = [
-            "Mac": .macOrigin,
-            "iPhone": Pose(position: SIMD3(1.15, 0.35, 1.08), covariance: 0.08, label: "iPhone"),
-            "AirPods": Pose(position: SIMD3(0.22, 0.12, 1.58), covariance: 0.22, label: "AirPods"),
-        ]
-        poses = truth
-        trails = ["iPhone": [], "AirPods": []]
         velocity = [:]
+        trails = useCompanions ? ["iPhone": [], "AirPods": []] : [:]
+        rebuildArray()
     }
 
     func stepTruth(dt: Double) {
+        guard useCompanions else { return }
         t += dt
         let tt = Float(t)
         if var phone = truth["iPhone"] {
@@ -67,15 +95,19 @@ final class PoseGraph: ObservableObject {
         poses[id] = p
     }
 
-    /// Snap each node onto its measured Mac range circle, keep height, smooth velocity.
+    /// Snap each companion onto its measured Mac range circle. Mac-array
+    /// elements stay bolted to the chassis — they are the instrument.
     func track(peaks: [EchoPeak], c: Double, dt: Double) {
-        guard let mac = poses["Mac"] else { return }
+        guard useCompanions, let mac = poses["Mac"] else {
+            poses["Mac"] = .macOrigin
+            return
+        }
         let step = Float(max(0.08, min(0.9, dt)))
         for id in ["iPhone", "AirPods"] {
             guard var est = poses[id] else { continue }
             let hits = peaks.filter {
-                ($0.transmitterID == id && $0.receiverID == "Mac") ||
-                ($0.transmitterID == "Mac" && $0.receiverID == id)
+                ($0.transmitterID == id && ($0.receiverID == "Mac" || $0.receiverID.hasPrefix("Mac-Mic"))) ||
+                (($0.transmitterID == "Mac" || $0.transmitterID.hasPrefix("Mac-")) && $0.receiverID == id)
             }
             let pred = est.position + (velocity[id] ?? .zero) * step
             let predR = simd_distance(SIMD3(pred.x, pred.y, 0), SIMD3(mac.position.x, mac.position.y, 0))
@@ -113,5 +145,11 @@ final class PoseGraph: ObservableObject {
     func range(of id: String) -> Float {
         guard let p = poses[id], let mac = poses["Mac"] else { return 0 }
         return simd_distance(SIMD3(p.position.x, p.position.y, 0), SIMD3(mac.position.x, mac.position.y, 0))
+    }
+
+    var arraySummary: String {
+        let tx = poses.keys.filter { $0.hasPrefix("Mac-L") || $0.hasPrefix("Mac-R") }.count
+        let rx = poses.keys.filter { $0.hasPrefix("Mac-Mic") }.count
+        return "Mac-Array  \(max(tx, 1)) TX  ·  \(max(rx, 1)) RX"
     }
 }

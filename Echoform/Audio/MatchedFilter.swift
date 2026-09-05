@@ -11,7 +11,8 @@ enum MatchedFilter {
         for i in 0..<min(record.count, n) { a[i] = record[i] }
         for i in 0..<min(chirp.count, n) { b[i] = chirp[i] }
 
-        let log2n = vDSP_Length(log2(Double(n)))
+        // Don't use log2(Double(n)) — 2^k can round to k-1 and scramble the FFT.
+        let log2n = vDSP_Length(Int(log2(Double(n)).rounded()))
         guard let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
             return []
         }
@@ -35,7 +36,10 @@ enum MatchedFilter {
                         // multiply A * conj(B)
                         var tmpR = [Float](repeating: 0, count: n/2)
                         var tmpI = [Float](repeating: 0, count: n/2)
-                        for i in 0..<(n/2) {
+                        // Packed real FFT: imagp[0] is Nyquist (real), not an imaginary part.
+                        tmpR[0] = realA[0] * realB[0]
+                        tmpI[0] = imagA[0] * imagB[0]
+                        for i in 1..<(n/2) {
                             tmpR[i] = realA[i] * realB[i] + imagA[i] * imagB[i]
                             tmpI[i] = imagA[i] * realB[i] - realA[i] * imagB[i]
                         }
@@ -53,7 +57,6 @@ enum MatchedFilter {
                                 var scale: Float = 1.0 / Float(n)
                                 vDSP_vsmul(packed, 1, &scale, &packed, 1, vDSP_Length(n))
                                 for i in 0..<n { mag[i] = abs(packed[i]) }
-                                // copy out — assigned below via return after
                                 realA = mag
                             }
                         }
@@ -67,9 +70,12 @@ enum MatchedFilter {
     static func pickPeaks(correlation: [Float], sampleRate: Double, maxPeaks: Int = 8, minDelay: Double = 0.0004) -> [(delay: Double, snr: Float)] {
         guard let maxv = correlation.max(), maxv > 1e-6 else { return [] }
         let minIndex = Int(minDelay * sampleRate)
+        // Negative lags wrap to the end of the FFT. Treat those as walls
+        // and you get 0.7 s "peaks" that drown the real echoes.
+        let maxIndex = min(correlation.count - 1, max(minIndex + 1, Int(0.04 * sampleRate)))
         var candidates: [(Int, Float)] = []
         if correlation.count < 3 { return [] }
-        for i in max(1, minIndex)..<(correlation.count - 1) {
+        for i in max(1, minIndex)..<maxIndex {
             if correlation[i] > correlation[i - 1], correlation[i] >= correlation[i + 1], correlation[i] > 0.12 * maxv {
                 candidates.append((i, correlation[i] / maxv))
             }

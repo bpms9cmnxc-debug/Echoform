@@ -161,16 +161,18 @@ struct ContentView: View {
             grid.integrate(peaks: peaks, poses: poses.poses, c: c)
             hops += 1
             status = String(format: "Auto-Track · iPhone %.2f m  AirPods %.2f m  · %d Peaks", poses.range(of: "iPhone"), poses.range(of: "AirPods"), peaks.count)
+            refreshField()
         } else {
-            audio.ping()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            status = "Live ping…"
+            Task {
+                await audio.ping()
                 poses.track(peaks: audio.lastPeaks, c: c, dt: dt)
                 grid.integrate(peaks: audio.lastPeaks, poses: poses.poses, c: c)
                 hops += 1
                 status = "Live ping · \(audio.lastPeaks.count) peaks."
+                refreshField()
             }
         }
-        refreshField()
     }
 
     private func refreshField() {

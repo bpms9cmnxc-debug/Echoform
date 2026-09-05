@@ -3,7 +3,7 @@ import Foundation
 struct ChirpSpec: Equatable {
     var sampleRate: Double = 48_000
     var startHz: Double = 18_000
-    var stopHz: Double = 19_500
+    var stopHz: Double = 20_500
     var duration: Double = 0.008
     var amplitude: Float = 0.12
 

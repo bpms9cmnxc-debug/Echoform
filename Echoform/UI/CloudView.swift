@@ -73,6 +73,14 @@ final class CloudSCNView: NSView {
         edges.geometry?.firstMaterial?.lightingModel = .constant
         root.addChildNode(edges)
 
+        // MacBook deck so the L/R speakers and mics have a body.
+        let deck = SCNNode(geometry: SCNBox(width: 0.31, height: 0.018, length: 0.22, chamferRadius: 0.006))
+        deck.position = SCNVector3(0, 0.92, 0)
+        deck.geometry?.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.22, alpha: 1)
+        deck.geometry?.firstMaterial?.metalness.contents = 0.35
+        deck.name = "macDeck"
+        root.addChildNode(deck)
+
         let origin = SCNNode(geometry: SCNSphere(radius: 0.05))
         origin.geometry?.firstMaterial?.diffuse.contents = NSColor.white
         origin.geometry?.firstMaterial?.emission.contents = NSColor.white
@@ -86,7 +94,7 @@ final class CloudSCNView: NSView {
         mat.diffuse.contents = NSColor(calibratedRed: 0.49, green: 0.90, blue: 0.83, alpha: 0.75)
         mat.emission.contents = NSColor(calibratedRed: 0.49, green: 0.90, blue: 0.83, alpha: 0.4)
         mat.transparency = 0.65
-        for _ in 0..<400 {
+        for _ in 0..<900 {
             let box = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0)
             box.firstMaterial = mat
             let n = SCNNode(geometry: box)
@@ -94,6 +102,22 @@ final class CloudSCNView: NSView {
             root.addChildNode(n)
             pool.append(n)
         }
+    }
+
+    private func color(for label: String) -> NSColor {
+        if label.hasPrefix("Mac-Mic") {
+            return NSColor(calibratedRed: 0.35, green: 0.92, blue: 0.45, alpha: 1)
+        }
+        if label == "Mac-L" || label == "Mac-R" {
+            return NSColor(calibratedRed: 0.98, green: 0.55, blue: 0.18, alpha: 1)
+        }
+        if label == "Mac" {
+            return .white
+        }
+        if label == "iPhone" {
+            return NSColor(calibratedRed: 0.49, green: 0.90, blue: 0.83, alpha: 1)
+        }
+        return NSColor(calibratedRed: 0.86, green: 0.70, blue: 0.18, alpha: 1)
     }
 
     func render(voxels: [OccupancyVoxel], poses: [Pose], trails: [String: [SIMD3<Float>]]) {
@@ -113,40 +137,53 @@ final class CloudSCNView: NSView {
             i += 1
         }
 
+        let live = Set(poses.map(\.label))
+        for (id, n) in deviceNodes where !live.contains(id) {
+            n.isHidden = true
+            stemNodes[id]?.isHidden = true
+            labelNodes[id]?.isHidden = true
+            ringNodes[id]?.isHidden = true
+        }
+
         for p in poses {
-            let color: NSColor = p.label == "Mac"
-                ? .white
-                : (p.label == "iPhone"
-                   ? NSColor(calibratedRed: 0.49, green: 0.90, blue: 0.83, alpha: 1)
-                   : NSColor(calibratedRed: 0.86, green: 0.70, blue: 0.18, alpha: 1))
+            let color = color(for: p.label)
             let y = max(0.2, p.position.z)
+            let isArray = p.label.hasPrefix("Mac-")
             if deviceNodes[p.label] == nil {
-                let ball = SCNNode(geometry: SCNSphere(radius: p.label == "Mac" ? 0.11 : 0.09))
+                let radius: CGFloat = p.label == "Mac" ? 0.07 : (isArray ? 0.035 : 0.09)
+                let ball = SCNNode(geometry: SCNSphere(radius: radius))
                 ball.geometry?.firstMaterial?.lightingModel = .constant
                 root.addChildNode(ball)
                 deviceNodes[p.label] = ball
-                let stem = SCNNode(geometry: SCNCylinder(radius: 0.015, height: 1))
-                stem.geometry?.firstMaterial?.lightingModel = .constant
-                root.addChildNode(stem)
-                stemNodes[p.label] = stem
+                if !isArray {
+                    let stem = SCNNode(geometry: SCNCylinder(radius: 0.015, height: 1))
+                    stem.geometry?.firstMaterial?.lightingModel = .constant
+                    root.addChildNode(stem)
+                    stemNodes[p.label] = stem
+                }
                 let text = SCNText(string: p.label, extrusionDepth: 0.2)
-                text.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+                text.font = NSFont.monospacedSystemFont(ofSize: isArray ? 9 : 12, weight: .medium)
                 text.firstMaterial?.diffuse.contents = color
                 text.firstMaterial?.lightingModel = .constant
                 let tn = SCNNode(geometry: text)
-                tn.scale = SCNVector3(0.012, 0.012, 0.012)
+                tn.scale = SCNVector3(0.010, 0.010, 0.010)
                 root.addChildNode(tn)
                 labelNodes[p.label] = tn
             }
+            deviceNodes[p.label]?.isHidden = false
             deviceNodes[p.label]?.geometry?.firstMaterial?.diffuse.contents = color
             deviceNodes[p.label]?.geometry?.firstMaterial?.emission.contents = color
             deviceNodes[p.label]?.position = SCNVector3(p.position.x, y, p.position.y)
-            stemNodes[p.label]?.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.5)
-            stemNodes[p.label]?.position = SCNVector3(p.position.x, y * 0.5, p.position.y)
-            stemNodes[p.label]?.scale = SCNVector3(1, y, 1)
-            labelNodes[p.label]?.position = SCNVector3(p.position.x + 0.12, y + 0.14, p.position.y)
+            if let stem = stemNodes[p.label] {
+                stem.isHidden = false
+                stem.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.5)
+                stem.position = SCNVector3(p.position.x, y * 0.5, p.position.y)
+                stem.scale = SCNVector3(1, y, 1)
+            }
+            labelNodes[p.label]?.isHidden = false
+            labelNodes[p.label]?.position = SCNVector3(p.position.x + 0.08, y + 0.10, p.position.y)
 
-            if p.label != "Mac" {
+            if p.label == "iPhone" || p.label == "AirPods" {
                 let r = CGFloat(max(0.2, hypot(p.position.x, p.position.y)))
                 if ringNodes[p.label] == nil {
                     let ring = SCNNode(geometry: SCNTorus(ringRadius: 1, pipeRadius: 0.012))
@@ -154,6 +191,7 @@ final class CloudSCNView: NSView {
                     root.addChildNode(ring)
                     ringNodes[p.label] = ring
                 }
+                ringNodes[p.label]?.isHidden = false
                 ringNodes[p.label]?.geometry = SCNTorus(ringRadius: r, pipeRadius: 0.012)
                 ringNodes[p.label]?.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.45)
                 ringNodes[p.label]?.geometry?.firstMaterial?.lightingModel = .constant

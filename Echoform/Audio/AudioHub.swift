@@ -19,12 +19,14 @@ final class AudioHub: ObservableObject {
     @Published var isArmed = false
     @Published var lastError: String?
     @Published var inputLevel: Float = 0
+    @Published var inputChannelCount = 1
+    @Published var outputChannelCount = 2
 
     let spec: ChirpSpec
     private let engine = AVAudioEngine()
     private var player = AVAudioPlayerNode()
     private var chirp: [Float] = []
-    private var recording: [Float] = []
+    private var recordingCh: [[Float]] = [[]]
     private var tapInstalled = false
 
     init(spec: ChirpSpec = ChirpSpec()) {
@@ -41,12 +43,16 @@ final class AudioHub: ObservableObject {
         }
     }
 
+    var usesMacArray: Bool {
+        selectedOutputID != "airpods" && selectedInputID != "airpods"
+    }
+
     func refreshDevices() {
         var list: [AudioDeviceInfo] = [
-            AudioDeviceInfo(id: "system-default", name: "System default (Mac / AirPods if selected in Settings)", hasInput: true, hasOutput: true)
+            AudioDeviceInfo(id: "system-default", name: "System default (Mac array / AirPods if selected in Settings)", hasInput: true, hasOutput: true)
         ]
         #if os(macOS)
-        list.append(AudioDeviceInfo(id: "builtin", name: "Mac built-in", hasInput: true, hasOutput: true))
+        list.append(AudioDeviceInfo(id: "builtin", name: "Mac built-in (L/R speakers + mic array)", hasInput: true, hasOutput: true))
         list.append(AudioDeviceInfo(id: "airpods", name: "AirPods (if connected as system I/O)", hasInput: true, hasOutput: true))
         list.append(AudioDeviceInfo(id: "usb", name: "USB interface (if present)", hasInput: true, hasOutput: true))
         #endif
@@ -83,24 +89,42 @@ final class AudioHub: ObservableObject {
         if !tapInstalled {
             let input = engine.inputNode
             let fmt = input.inputFormat(forBus: 0)
+            let nch = max(1, Int(fmt.channelCount))
+            inputChannelCount = nch
+            recordingCh = Array(repeating: [], count: nch)
             input.installTap(onBus: 0, bufferSize: 4096, format: fmt.sampleRate > 0 ? fmt : nil) { [weak self] buffer, _ in
                 guard let self else { return }
                 let frames = Int(buffer.frameLength)
-                guard let ch = buffer.floatChannelData?[0] else { return }
-                var chunk = [Float](repeating: 0, count: frames)
-                for i in 0..<frames { chunk[i] = ch[i] }
+                guard frames > 0, let src = buffer.floatChannelData else { return }
+                let chans = Int(buffer.format.channelCount)
+                var chunks = Array(repeating: [Float](), count: max(1, chans))
+                for c in 0..<max(1, chans) {
+                    var chunk = [Float](repeating: 0, count: frames)
+                    let ptr = src[c]
+                    for i in 0..<frames { chunk[i] = ptr[i] }
+                    chunks[c] = chunk
+                }
+                var rms: Float = 0
+                vDSP_rmsqv(chunks[0], 1, &rms, vDSP_Length(chunks[0].count))
                 Task { @MainActor in
-                    self.recording.append(contentsOf: chunk)
-                    if self.recording.count > Int(self.spec.sampleRate * 0.6) {
-                        self.recording.removeFirst(self.recording.count - Int(self.spec.sampleRate * 0.4))
+                    if self.recordingCh.count != chunks.count {
+                        self.recordingCh = Array(repeating: [], count: chunks.count)
+                        self.inputChannelCount = chunks.count
                     }
-                    var rms: Float = 0
-                    vDSP_rmsqv(chunk, 1, &rms, vDSP_Length(chunk.count))
+                    for c in 0..<chunks.count {
+                        self.recordingCh[c].append(contentsOf: chunks[c])
+                        let cap = Int(self.spec.sampleRate * 0.6)
+                        if self.recordingCh[c].count > cap {
+                            self.recordingCh[c].removeFirst(self.recordingCh[c].count - Int(self.spec.sampleRate * 0.4))
+                        }
+                    }
                     self.inputLevel = rms
                 }
             }
             tapInstalled = true
         }
+        let outFmt = engine.mainMixerNode.outputFormat(forBus: 0)
+        outputChannelCount = max(1, Int(outFmt.channelCount))
         isArmed = true
         lastError = nil
     }
@@ -127,7 +151,7 @@ final class AudioHub: ObservableObject {
             lastError = error.localizedDescription
             return
         }
-        recording.removeAll(keepingCapacity: true)
+        for i in 0..<recordingCh.count { recordingCh[i].removeAll(keepingCapacity: true) }
         let format = player.outputFormat(forBus: 0)
         let playFormat = format.sampleRate > 0 && format.channelCount > 0
             ? format
@@ -137,29 +161,62 @@ final class AudioHub: ObservableObject {
             return
         }
         let rate = playFormat.sampleRate
-        var specNow = spec
-        specNow.sampleRate = rate
-        let samples = ChirpSynth.samples(specNow)
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: playFormat, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
-        pcm.frameLength = AVAudioFrameCount(samples.count)
+        let outCh = Int(playFormat.channelCount)
+        outputChannelCount = max(1, outCh)
+
+        var specL = spec
+        specL.sampleRate = rate
+        specL.startHz = 18_000
+        specL.stopHz = 19_500
+        var specR = spec
+        specR.sampleRate = rate
+        specR.startHz = 19_500
+        specR.stopHz = 21_000
+        let chirpL = ChirpSynth.samples(specL)
+        let chirpR = ChirpSynth.samples(specR)
+        let n = max(chirpL.count, chirpR.count)
+        guard let pcm = AVAudioPCMBuffer(pcmFormat: playFormat, frameCapacity: AVAudioFrameCount(n)) else { return }
+        pcm.frameLength = AVAudioFrameCount(n)
         if let dest = pcm.floatChannelData {
-            let chans = Int(playFormat.channelCount)
-            for c in 0..<chans {
-                for i in 0..<samples.count { dest[c][i] = samples[i] }
+            for c in 0..<outCh {
+                let src = (c == 0 || outCh == 1) ? chirpL : chirpR
+                for i in 0..<n {
+                    dest[c][i] = i < src.count ? src[i] : 0
+                }
             }
         }
         player.stop()
         player.play()
         player.scheduleBuffer(pcm, completionHandler: nil)
 
-        try? await Task.sleep(nanoseconds: 220_000_000)
+        try? await Task.sleep(nanoseconds: 240_000_000)
 
-        let corr = MatchedFilter.correlate(record: recording, chirp: samples)
-        let peaks = MatchedFilter.pickPeaks(correlation: corr, sampleRate: rate)
-        let tx = poseID(forDeviceID: selectedOutputID)
-        let rx = poseID(forDeviceID: selectedInputID)
-        lastPeaks = peaks.map {
-            EchoPeak(delaySeconds: $0.delay, snr: $0.snr, transmitterID: tx, receiverID: rx)
+        let array = usesMacArray
+        var peaks: [EchoPeak] = []
+        let recs = recordingCh
+        inputChannelCount = max(1, recs.count)
+        for (ci, rec) in recs.enumerated() {
+            let rx: String
+            if array {
+                rx = MacArray.micID(channel: ci, inputCount: recs.count)
+            } else {
+                rx = poseID(forDeviceID: selectedInputID)
+            }
+            let corrL = MatchedFilter.correlate(record: rec, chirp: chirpL)
+            let pickL = MatchedFilter.pickPeaks(correlation: corrL, sampleRate: rate)
+            let txL = array ? MacArray.speakerID(channel: 0, outputCount: outCh) : poseID(forDeviceID: selectedOutputID)
+            peaks.append(contentsOf: pickL.map {
+                EchoPeak(delaySeconds: $0.delay, snr: $0.snr, transmitterID: txL, receiverID: rx)
+            })
+            if outCh > 1 && array {
+                let corrR = MatchedFilter.correlate(record: rec, chirp: chirpR)
+                let pickR = MatchedFilter.pickPeaks(correlation: corrR, sampleRate: rate)
+                let txR = MacArray.speakerID(channel: 1, outputCount: outCh)
+                peaks.append(contentsOf: pickR.map {
+                    EchoPeak(delaySeconds: $0.delay, snr: $0.snr, transmitterID: txR, receiverID: rx)
+                })
+            }
         }
+        lastPeaks = peaks
     }
 }

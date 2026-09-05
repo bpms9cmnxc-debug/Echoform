@@ -22,10 +22,14 @@ final class OccupancyGrid: ObservableObject {
     }
 
     private func pose(_ id: String, in poses: [String: Pose]) -> Pose? {
-        poses[id] ?? poses["Mac"]
+        if let p = poses[id] { return p }
+        if id.hasPrefix("Mac") { return poses["Mac"] }
+        return poses["Mac"]
     }
 
     /// Smear each bistatic ellipsoid of revolution into the grid.
+    /// Mac-L and Mac-R are 26 cm apart, so even a single built-in mic
+    /// yields two intersecting families — a 3D room image without an iPhone.
     func integrate(peaks: [EchoPeak], poses: [String: Pose], c: Double) {
         var acc: [SIMD3<Int>: Float] = [:]
         let half = Int((extent / cell).rounded())
@@ -82,7 +86,7 @@ final class OccupancyGrid: ObservableObject {
                 weight: $0.value
             )
         }
-        voxels = (voxels + fresh).suffix(1800).map { $0 }
+        voxels = (voxels + fresh).suffix(2800).map { $0 }
     }
 
     func recomputeField(poses: [Pose], wavelength: Float) {
@@ -91,13 +95,15 @@ final class OccupancyGrid: ObservableObject {
         guard w > 1, h > 1 else { return }
         var f = [Float](repeating: 0, count: w * h)
         let k = 2 * Float.pi / max(wavelength, 0.002)
+        let sources = poses.filter { $0.label == "Mac" || $0.label.hasPrefix("Mac-L") || $0.label.hasPrefix("Mac-R") || $0.label == "iPhone" || $0.label == "AirPods" }
+        let use = sources.isEmpty ? poses : sources
         for y in 0..<h {
             for x in 0..<w {
                 let px = (Float(x) / Float(w - 1) - 0.5) * extent * 2
                 let py = (Float(y) / Float(h - 1) - 0.5) * extent * 1.5
                 var re: Float = 0
                 var im: Float = 0
-                for pose in poses {
+                for pose in use {
                     let dx = px - pose.position.x
                     let dy = py - pose.position.y
                     let r = max(0.05, sqrt(dx * dx + dy * dy))
